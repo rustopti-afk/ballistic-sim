@@ -118,5 +118,6 @@ def method_not_allowed(_err: Any) -> Any:
 
 
 if __name__ == "__main__":
-    # Bind to all interfaces so the API is reachable from the host network.
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
