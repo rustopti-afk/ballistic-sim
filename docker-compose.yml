@@ -4,3 +4,4 @@ services:
     ports:
       - "4004:5000"
     restart: unless-stopped
+    privileged: true
