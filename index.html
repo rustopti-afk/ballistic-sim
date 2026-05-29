@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLRS Targeting System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+    --o:   #c87020;   /* orange accent */
+    --ob:  #8a4a10;   /* orange border */
+    --od:  #3a1e08;   /* orange dark */
+    --bg:  #0c0a08;   /* main bg */
+    --bg2: #121008;   /* panel bg */
+    --bg3: #1a1510;   /* lighter panel */
+    --br:  #2a2018;   /* border default */
+    --txt: #c8b898;   /* text primary */
+    --dim: #6a5a40;   /* text dim */
+    --r:   #cc2200;   /* danger red */
+    --rb:  #5a1000;   /* red border */
+    --y:   #c8a000;   /* amber warning */
+    --w:   #e8d8b8;   /* bright text */
+    --stripe: repeating-linear-gradient(
+        45deg,
+        transparent 0px, transparent 5px,
+        rgba(200,112,32,.18) 5px, rgba(200,112,32,.18) 10px
+    );
+}
+
+::selection { background: var(--o); color: #000; }
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--ob); }
+
+@keyframes blink  { 0%,100%{opacity:1} 50%{opacity:0} }
+@keyframes cursor { 0%,100%{opacity:1} 50%{opacity:0} }
+@keyframes armed  { 0%,100%{opacity:1} 49%{opacity:1} 50%{opacity:.3} }
+@keyframes scanline {
+    0%   { transform:translateY(-100%); }
+    100% { transform:translateY(100vh); }
+}
+
+html, body {
+    height: 100%; background: var(--bg); color: var(--txt);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px; font-weight: 500;
+    overflow: hidden; display: flex; flex-direction: column;
+}
+
+/* ── TOPBAR ── */
+#topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 14px;
+    background: var(--bg2);
+    border-bottom: 2px solid var(--ob);
+    flex-shrink: 0; height: 34px;
+    position: relative;
+}
+#topbar::after {
+    content:''; position:absolute; bottom:-4px; left:0; right:0; height:2px;
+    background: var(--stripe);
+}
+.tb-title {
+    font-size: 15px; font-weight: 700; letter-spacing: .12em;
+    color: var(--w); text-transform: uppercase;
+    display: flex; align-items: center; gap: 12px;
+}
+.tb-title .sys {
+    font-size: 10px; font-weight: 500; color: var(--dim);
+    letter-spacing: .06em; border-left: 1px solid var(--br); padding-left: 12px;
+}
+.tb-right { display: flex; gap: 22px; font-size: 11px; color: var(--dim); align-items: center; }
+.tb-dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: #44dd44; margin-right: 5px; animation: armed 1.4s step-end infinite;
+}
+.tb-armed {
+    color: var(--r); font-weight: 700; letter-spacing: .14em; font-size: 11px;
+    border: 1px solid var(--rb); padding: 1px 8px;
+    animation: armed 1.0s step-end infinite;
+}
+.tb-clock { color: var(--o); font-size: 13px; font-weight: 600; letter-spacing: .08em; }
+
+/* ── LAYOUT ── */
+#app { display: flex; flex: 1; overflow: hidden; }
+
+/* ── SIDEBAR ── */
+#sidebar {
+    width: 305px; flex-shrink: 0;
+    border-right: 2px solid var(--ob);
+    display: flex; flex-direction: column;
+    overflow-y: auto; background: var(--bg);
+}
+
+.sec {
+    padding: 0;
+    border-bottom: 1px solid var(--br);
+}
+.sec-body { padding: 10px 12px; }
+
+.sec-hdr {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--br);
+    padding: 5px 12px;
+    font-size: 10px; font-weight: 700; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--o);
+    display: flex; align-items: center; justify-content: space-between;
+    position: relative; overflow: hidden;
+}
+.sec-hdr::before {
+    content:''; position:absolute; inset:0;
+    background: var(--stripe); opacity:.6;
+}
+.sec-hdr span { position: relative; z-index: 1; }
+.sec-hdr .sec-tag {
+    font-size: 9px; color: var(--dim); font-weight: 500; letter-spacing: .06em;
+}
+
+/* Origin block */
+.origin-val {
+    font-size: 14px; font-weight: 700; padding: 7px 10px;
+    border: 1px solid var(--ob); color: var(--w);
+    background: var(--bg2); letter-spacing: .06em;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.origin-tag { font-size: 9px; color: var(--o); font-weight: 600; letter-spacing: .1em; }
+
+/* Target display */
+#targetDisplay {
+    font-size: 18px; font-weight: 700; color: var(--w);
+    margin: 4px 0; min-height: 24px; letter-spacing: .04em;
+}
+#targetDisplay.set { color: var(--o); }
+.click-hint { font-size: 10px; color: var(--dim); letter-spacing: .04em; }
+
+/* Inputs */
+.field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.field label {
+    color: var(--dim); font-size: 10px; font-weight: 600;
+    letter-spacing: .12em; text-transform: uppercase;
+}
+.field input {
+    background: var(--bg); border: 1px solid var(--br);
+    color: var(--w); font-family: inherit; font-size: 14px; font-weight: 600;
+    padding: 5px 8px; outline: none; width: 100%;
+    transition: border-color .12s;
+}
+.field input:focus { border-color: var(--o); }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+/* Presets */
+.presets { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.preset {
+    background: var(--bg2); border: 1px solid var(--br);
+    color: var(--dim); font-family: inherit; font-size: 10px; font-weight: 600;
+    padding: 3px 9px; cursor: pointer; transition: all .1s;
+    text-transform: uppercase; letter-spacing: .06em;
+}
+.preset:hover { border-color: var(--ob); color: var(--o); background: var(--od); }
+
+/* Street view */
+#btnStreetView {
+    width: 100%; margin-top: 7px; padding: 5px 8px;
+    background: var(--bg2); border: 1px solid var(--br);
+    color: var(--dim); font-family: inherit; font-size: 10px; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase; cursor: pointer;
+    transition: all .12s;
+}
+#btnStreetView:hover { border-color: var(--ob); color: var(--o); }
+
+/* FIRE button */
+#btnCompute {
+    width: 100%; position: relative; overflow: hidden;
+    background: var(--od);
+    border: 2px solid var(--ob);
+    color: var(--w); font-family: inherit; font-size: 16px; font-weight: 700;
+    letter-spacing: .2em; text-transform: uppercase;
+    padding: 11px; cursor: pointer; margin-top: 6px;
+    transition: all .12s;
+}
+#btnCompute::before {
+    content: ''; position: absolute; inset: 0;
+    background: var(--stripe);
+}
+#btnCompute::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(255,255,255,.04) 0%, transparent 100%);
+}
+#btnCompute span { position: relative; z-index: 1; }
+#btnCompute:hover:not(:disabled) {
+    background: #5a2e08; border-color: var(--o);
+    box-shadow: 0 0 18px rgba(200,112,32,.4);
+}
+#btnCompute:disabled { opacity: .35; cursor: not-allowed; }
+
+/* Export button */
+#btnReport {
+    width: 100%; background: var(--bg2); border: 1px solid var(--br);
+    color: var(--dim); font-family: inherit; font-size: 10px; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase;
+    padding: 5px; cursor: pointer; margin-top: 4px; transition: all .1s;
+}
+#btnReport:hover { border-color: var(--ob); color: var(--o); }
+
+/* Telemetry */
+.tel-table { width: 100%; border-collapse: collapse; }
+.tel-table td { padding: 4px 0; font-size: 12px; border-bottom: 1px solid var(--br); }
+.tel-table tr:last-child td { border-bottom: none; }
+.tel-table td:first-child { color: var(--dim); width: 52%; font-weight: 600; letter-spacing:.04em; text-transform:uppercase; font-size:10px; }
+.tel-val { text-align: right; color: var(--w); font-weight: 700; font-size: 14px; }
+.tel-bar-wrap { height: 2px; background: var(--br); margin-top: 3px; }
+.tel-bar { height: 100%; background: var(--o); transition: width .3s; width: 0%; }
+
+/* Log */
+#missionLog {
+    background: var(--bg);
+    border: 1px solid var(--br);
+    padding: 7px 8px; font-size: 11px; color: var(--dim);
+    max-height: 120px; overflow-y: auto; line-height: 1.7; flex: 1;
+    font-family: 'Courier New', monospace;
+}
+.log-ok   { color: #44bb44; }
+.log-warn { color: var(--y); }
+.log-err  { color: var(--r); font-weight: 700; }
+
+/* ── GLOBE / MAP ── */
+#vizArea { flex:1; position:relative; background:#000; overflow:hidden; }
+#globeContainer { position:absolute; inset:0; cursor:crosshair; }
+#mapContainer { position:absolute; inset:0; display:none; background:#000; }
+#mapContainer .leaflet-container { width:100%; height:100%; background:#0a0806; font-family:inherit; }
+
+/* Targeting corners */
+#cornerTL, #cornerTR, #cornerBL, #cornerBR {
+    position:absolute; width:22px; height:22px; pointer-events:none; z-index:20;
+}
+#cornerTL { top:12px;    left:12px;    border-top:2px solid var(--o); border-left:2px solid var(--o); }
+#cornerTR { top:12px;    right:12px;   border-top:2px solid var(--o); border-right:2px solid var(--o); }
+#cornerBL { bottom:12px; left:12px;    border-bottom:2px solid var(--o); border-left:2px solid var(--o); }
+#cornerBR { bottom:12px; right:12px;   border-bottom:2px solid var(--o); border-right:2px solid var(--o); }
+
+/* View/Night toggles */
+#viewToggle, #nightToggle {
+    position:absolute; z-index:100;
+    background: rgba(12,10,8,.88);
+    border: 1px solid var(--ob);
+    color: var(--dim); font-family:'Rajdhani',sans-serif; font-size:11px; font-weight:600;
+    padding: 5px 14px; cursor: pointer; letter-spacing:.1em;
+    text-transform:uppercase; transition:all .12s;
+}
+#viewToggle  { bottom:14px; right:14px; }
+#nightToggle { bottom:14px; left:14px; }
+#viewToggle:hover, #nightToggle:hover { border-color:var(--o); color:var(--o); }
+
+/* Loading overlay */
+#loadOverlay {
+    position:absolute; inset:0; background:rgba(8,6,4,.96);
+    display:none; flex-direction:column;
+    align-items:center; justify-content:center; gap:12px; z-index:40;
+}
+.load-title { font-size:13px; font-weight:700; color:var(--o); letter-spacing:.2em; text-transform:uppercase; }
+#loadText { font-size:12px; color:var(--txt); letter-spacing:.06em; min-width:260px; font-weight:600; }
+#loadText::before { content:'▶  '; color:var(--o); }
+.load-bar-wrap { width:260px; height:3px; background:var(--br); }
+.load-bar { width:0%; height:100%; background:var(--o); transition:width .3s; }
+.load-steps { font-size:10px; color:var(--dim); min-width:260px; padding-left:18px; }
+
+/* HUD */
+#hud {
+    position:absolute; top:14px; right:46px;
+    text-align:right; font-size:11px; color:var(--dim);
+    line-height:2; pointer-events:none; font-weight:600; letter-spacing:.04em;
+}
+#hudCoords { color:var(--o); font-size:13px; font-weight:700; }
+#hudCountdown { color:var(--r); font-size:15px; font-weight:700; letter-spacing:.08em; }
+#hudMode { font-size:10px; color:var(--br); }
+
+/* Flight bar */
+#flightBar {
+    position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+    width:300px; display:none; flex-direction:column; gap:5px;
+    background:rgba(12,10,8,.92); border:1px solid var(--ob); padding:8px 12px;
+}
+#flightLabel {
+    font-size:10px; font-weight:700; color:var(--o);
+    letter-spacing:.16em; text-transform:uppercase;
+    animation: armed .7s step-end infinite;
+}
+.flight-track-wrap { display:flex; align-items:center; gap:8px; }
+#flightTrack { flex:1; height:3px; background:var(--br); }
+#flightFill  { width:0%; height:100%; background:var(--o); transition:width .08s linear; }
+#flightPct   { font-size:12px; font-weight:700; color:var(--w); min-width:34px; text-align:right; }
+
+/* ── Explosion ── */
+@keyframes exp-flash {
+    0%   { transform:translate(-50%,-50%) scale(0);   opacity:1; }
+    20%  { transform:translate(-50%,-50%) scale(1.2); opacity:1; }
+    100% { transform:translate(-50%,-50%) scale(2.5); opacity:0; }
+}
+@keyframes exp-fireball {
+    0%   { transform:translate(-50%,-50%) scale(0);   opacity:.95; }
+    40%  { transform:translate(-50%,-50%) scale(1);   opacity:.9; }
+    100% { transform:translate(-50%,-50%) scale(1.6); opacity:0; }
+}
+@keyframes exp-smoke {
+    0%   { transform:translate(-50%,-110%) scale(0) scaleY(0.3); opacity:.7; }
+    30%  { opacity:.6; }
+    100% { transform:translate(-50%,-200%) scale(1.8) scaleY(1.4); opacity:0; }
+}
+@keyframes exp-stem {
+    0%   { transform:translate(-50%, 0) scaleY(0); opacity:.8; }
+    60%  { opacity:.7; }
+    100% { transform:translate(-50%, 0) scaleY(1); opacity:0; }
+}
+@keyframes exp-ring {
+    0%   { transform:translate(-50%,-50%) scale(0); opacity:.9; }
+    100% { transform:translate(-50%,-50%) scale(1); opacity:0; }
+}
+@keyframes exp-spark {
+    0%   { opacity:1; }
+    100% { transform:translate(var(--sx),var(--sy)); opacity:0; }
+}
+</style>
+</head>
+<body>
+
+<!-- Topbar -->
+<div id="topbar">
+    <div class="tb-title">
+        MLRS TARGETING COMPUTER
+        <span class="sys">MK-II  ·  BALLISTIC FIRE CONTROL</span>
+    </div>
+    <div class="tb-right">
+        <span class="tb-armed">⚠ ARMED</span>
+        <span><span class="tb-dot"></span>DATALINK ACTIVE</span>
+        <span class="tb-clock" id="utcClock">--:--:-- UTC</span>
+    </div>
+</div>
+
+<div id="app">
+
+<!-- Sidebar -->
+<div id="sidebar">
+
+    <div class="sec">
+        <div class="sec-hdr"><span>LAUNCH ORIGIN</span><span class="sec-tag">FIXED / LOCKED</span></div>
+        <div class="sec-body">
+            <div class="origin-val">
+                <span>50.4501°N  30.5234°E</span>
+                <span class="origin-tag">UA · KYIV</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="sec">
+        <div class="sec-hdr"><span>TARGET COORDINATES</span><span class="sec-tag" id="tgtStatus">NO TARGET</span></div>
+        <div class="sec-body">
+            <div id="targetDisplay">—  AWAITING DESIGNATION  —</div>
+            <div class="click-hint">Right-click on globe or map to designate target</div>
+            <div class="grid2" style="margin-top:8px">
+                <div class="field">
+                    <label>Latitude</label>
+                    <input type="number" id="latEnd" value="40.7128" step="0.0001">
+                </div>
+                <div class="field">
+                    <label>Longitude</label>
+                    <input type="number" id="lonEnd" value="-74.0060" step="0.0001">
+                </div>
+            </div>
+            <div class="presets">
+                <button class="preset" onclick="setTarget(40.71,-74.00)">New York</button>
+                <button class="preset" onclick="setTarget(51.50,-0.12)">London</button>
+                <button class="preset" onclick="setTarget(48.85,2.35)">Paris</button>
+                <button class="preset" onclick="setTarget(35.68,139.69)">Tokyo</button>
+                <button class="preset" onclick="setTarget(55.75,37.61)">Moscow</button>
+                <button class="preset" onclick="setTarget(-33.86,151.20)">Sydney</button>
+            </div>
+            <button id="btnStreetView" onclick="openStreetView()">⊕  Street View — Impact Zone</button>
+        </div>
+    </div>
+
+    <div class="sec">
+        <div class="sec-hdr"><span>PAYLOAD PARAMETERS</span></div>
+        <div class="sec-body">
+            <div class="grid2">
+                <div class="field">
+                    <label>Mass (kt)</label>
+                    <input type="number" id="mass" value="0.0015" step="0.0001" min="0.0001">
+                </div>
+                <div class="field">
+                    <label>Diameter (m)</label>
+                    <input type="number" id="diameter" value="0.8" step="0.1">
+                </div>
+            </div>
+            <div class="field">
+                <label>Drag Coefficient Cd</label>
+                <input type="number" id="dragCd" value="0.29" step="0.01">
+            </div>
+            <button id="btnCompute" onclick="computeTrajectory()"><span>CALCULATE TRAJECTORY</span></button>
+            <button id="btnReport" onclick="downloadReport()">↓  Export Mission Report</button>
+        </div>
+    </div>
+
+    <div class="sec">
+        <div class="sec-hdr"><span>TELEMETRY</span><span class="sec-tag" id="telStatus">STANDBY</span></div>
+        <div class="sec-body">
+            <table class="tel-table">
+                <tr><td>Surface Dist</td><td class="tel-val"><span id="tDist">---</span> <small style="font-size:10px;color:var(--dim)">km</small></td></tr>
+                <tr><td>Max Apogee</td>  <td class="tel-val"><span id="tAlt">---</span> <small style="font-size:10px;color:var(--dim)">km</small></td></tr>
+                <tr><td>Flight Time</td> <td class="tel-val"><span id="tTime">---</span> <small style="font-size:10px;color:var(--dim)">min</small></td></tr>
+                <tr><td>Init Velocity</td><td class="tel-val"><span id="tVel">---</span> <small style="font-size:10px;color:var(--dim)">km/s</small></td></tr>
+                <tr><td>Cur Altitude</td><td class="tel-val"><span id="tCurAlt">---</span> <small style="font-size:10px;color:var(--dim)">km</small></td></tr>
+                <tr><td colspan="2" style="padding-top:6px">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                        <span style="color:var(--dim);font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase">Progress</span>
+                        <span id="tPct" style="color:var(--o);font-weight:700">0%</span>
+                    </div>
+                    <div class="tel-bar-wrap"><div class="tel-bar" id="telBar"></div></div>
+                </td></tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="sec">
+        <div class="sec-hdr"><span>ALTITUDE PROFILE</span></div>
+        <div class="sec-body" style="padding-bottom:8px">
+            <canvas id="altCanvas" width="276" height="56" style="display:block;width:100%;border:1px solid var(--br);background:var(--bg)"></canvas>
+        </div>
+    </div>
+
+    <div class="sec">
+        <div class="sec-hdr"><span>STRATEGIC TARGETS</span><span class="sec-tag">19 OBJECTS</span></div>
+        <div class="sec-body" style="padding-bottom:6px">
+            <button id="btnStrategic" onclick="toggleStrategic()"
+                style="width:100%;background:var(--od);border:1px solid var(--ob);color:var(--o);
+                font-family:inherit;font-size:11px;font-weight:700;padding:6px;
+                cursor:pointer;letter-spacing:.1em;text-transform:uppercase;transition:all .12s;margin-bottom:8px">
+                ◉ TARGETS ON
+            </button>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:6px">
+                <div style="color:var(--dim);font-size:9px;font-weight:600;letter-spacing:.08em;padding:2px 0;border-left:2px solid #e87020;padding-left:5px">⬟ COMMAND</div>
+                <div style="color:var(--dim);font-size:9px;font-weight:600;letter-spacing:.08em;padding:2px 0;border-left:2px solid #cc4422;padding-left:5px">✈ AIRBASE</div>
+                <div style="color:var(--dim);font-size:9px;font-weight:600;letter-spacing:.08em;padding:2px 0;border-left:2px solid #44dd66;padding-left:5px">☢ NUCLEAR</div>
+                <div style="color:var(--dim);font-size:9px;font-weight:600;letter-spacing:.08em;padding:2px 0;border-left:2px solid #ffcc00;padding-left:5px">⚡ ENERGY</div>
+            </div>
+            <div id="stratList" style="display:flex;flex-wrap:wrap;gap:3px"></div>
+        </div>
+    </div>
+
+    <div class="sec">
+        <div class="sec-hdr"><span>VIEW CONTROLS</span></div>
+        <div class="sec-body" style="display:flex;gap:6px">
+            <button id="viewToggle2" onclick="toggleView()"
+                style="flex:1;background:var(--od);border:1px solid var(--ob);color:var(--w);
+                font-family:inherit;font-size:11px;font-weight:700;padding:7px 4px;
+                cursor:pointer;letter-spacing:.1em;text-transform:uppercase;transition:all .12s">
+                🌐 3D GLOBE
+            </button>
+            <button id="nightToggle2" onclick="toggleNight()"
+                style="flex:1;background:var(--bg2);border:1px solid var(--br);color:var(--dim);
+                font-family:inherit;font-size:11px;font-weight:700;padding:7px 4px;
+                cursor:pointer;letter-spacing:.1em;text-transform:uppercase;transition:all .12s">
+                ☀ DAY
+            </button>
+        </div>
+    </div>
+
+    <div class="sec" style="flex:1;display:flex;flex-direction:column">
+        <div class="sec-hdr"><span>MISSION LOG</span></div>
+        <div class="sec-body" style="flex:1;display:flex;flex-direction:column;padding-bottom:0">
+            <div id="missionLog">
+<span class="log-ok">[OK]</span> system ready.<br>
+<span class="log-ok">[OK]</span> geospatial db connected.<br>
+<span class="log-warn">[--]</span> awaiting target designation.
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Globe / Map -->
+<div id="vizArea">
+    <div id="cornerTL"></div><div id="cornerTR"></div>
+    <div id="cornerBL"></div><div id="cornerBR"></div>
+
+    <button id="viewToggle" onclick="toggleView()">3D GLOBE</button>
+    <button id="nightToggle" onclick="toggleNight()">DAY</button>
+    <div id="globeContainer"></div>
+    <div id="mapContainer"></div>
+
+    <div id="loadOverlay">
+        <div class="load-title">⚙  BALLISTIC SOLVER  ⚙</div>
+        <div id="loadText">initializing solver...</div>
+        <div class="load-bar-wrap"><div class="load-bar" id="loadBar"></div></div>
+        <div class="load-steps" id="loadSteps">preparing equations of motion</div>
+    </div>
+
+    <div id="hud">
+        <div id="hudCoords">AWAITING TARGET</div>
+        <div id="hudTime2"></div>
+        <div id="hudMode">3D GLOBE</div>
+        <div id="hudCountdown"></div>
+    </div>
+
+    <div id="flightBar">
+        <div id="flightLabel">⚠  OBJECT IN TRANSIT</div>
+        <div class="flight-track-wrap">
+            <div id="flightTrack"><div id="flightFill"></div></div>
+            <div id="flightPct">0%</div>
+        </div>
+    </div>
+</div>
+
+</div><!-- #app -->
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/globe.gl"></script>
+<script>
+const KYIV_LAT = 50.4501, KYIV_LNG = 30.5234;
+
+// ── Cities ──
+const CITIES = [
+    { name:'Kyiv',          lat:50.4501, lng:30.5234, type:'capital' },
+    { name:'Kharkiv',       lat:49.9935, lng:36.2304, type:'ua' },
+    { name:'Odesa',         lat:46.4825, lng:30.7233, type:'ua' },
+    { name:'Dnipro',        lat:48.4647, lng:35.0462, type:'ua' },
+    { name:'Zaporizhzhia',  lat:47.8388, lng:35.1396, type:'ua' },
+    { name:'Lviv',          lat:49.8397, lng:24.0297, type:'ua' },
+    { name:'Kherson',       lat:46.6354, lng:32.6169, type:'ua' },
+    { name:'Mariupol',      lat:47.0956, lng:37.5494, type:'ua' },
+    { name:'Moscow',        lat:55.7558, lng:37.6173, type:'ru' },
+    { name:'St.Petersburg', lat:59.9311, lng:30.3609, type:'ru' },
+    { name:'Belgorod',      lat:50.5994, lng:36.5854, type:'ru' },
+    { name:'Voronezh',      lat:51.6720, lng:39.1843, type:'ru' },
+    { name:'Warsaw',        lat:52.2297, lng:21.0122, type:'world' },
+    { name:'Berlin',        lat:52.5200, lng:13.4050, type:'world' },
+    { name:'London',        lat:51.5074, lng:-0.1278, type:'world' },
+    { name:'Paris',         lat:48.8566, lng:2.3522,  type:'world' },
+    { name:'Washington',    lat:38.9072, lng:-77.0369,type:'world' },
+    { name:'New York',      lat:40.7128, lng:-74.0060,type:'world' },
+    { name:'Beijing',       lat:39.9042, lng:116.4074,type:'world' },
+    { name:'Tokyo',         lat:35.6762, lng:139.6503,type:'world' },
+    { name:'Tel Aviv',      lat:32.0853, lng:34.7818, type:'world' },
+    { name:'Ankara',        lat:39.9208, lng:32.8541, type:'world' },
+];
+
+const C_COLORS = { capital:'#e87020', ua:'#c8a060', ru:'#cc4422', world:'#7a6040' };
+
+// ── Strategic objects ──
+const STRATEGIC = [
+    // NATO command
+    { name:'Pentagon',        lat:38.871, lng:-77.056, cat:'cmd',  icon:'⬟' },
+    { name:'NATO HQ',         lat:50.880, lng:4.429,   cat:'cmd',  icon:'⬟' },
+    { name:'NORAD/Cheyenne',  lat:38.745, lng:-104.846,cat:'cmd',  icon:'⬟' },
+    { name:'Kremlin',         lat:55.752, lng:37.618,  cat:'cmd',  icon:'⬟' },
+    { name:'White House',     lat:38.898, lng:-77.037, cat:'cmd',  icon:'⬟' },
+    // Air bases
+    { name:'Ramstein AB',     lat:49.437, lng:7.600,   cat:'mil',  icon:'✈' },
+    { name:'RAF Lakenheath',  lat:52.409, lng:0.561,   cat:'mil',  icon:'✈' },
+    { name:'Incirlik AB',     lat:37.001, lng:35.426,  cat:'mil',  icon:'✈' },
+    { name:'Diego Garcia',    lat:-7.320, lng:72.424,  cat:'mil',  icon:'✈' },
+    { name:'Bagram AB',       lat:34.946, lng:69.265,  cat:'mil',  icon:'✈' },
+    { name:'Kadena AB',       lat:26.351, lng:127.769, cat:'mil',  icon:'✈' },
+    { name:'Severomorsk',     lat:69.074, lng:33.416,  cat:'mil',  icon:'✈' },
+    // Nuclear / missile
+    { name:'Plesetsk',        lat:62.926, lng:40.578,  cat:'nuke', icon:'☢' },
+    { name:'Baikonur',        lat:45.960, lng:63.305,  cat:'nuke', icon:'☢' },
+    { name:'Vandenberg SFB',  lat:34.736, lng:-120.568,cat:'nuke', icon:'☢' },
+    { name:'Kapustin Yar',    lat:48.580, lng:45.790,  cat:'nuke', icon:'☢' },
+    { name:'Punggye-ri',      lat:41.333, lng:129.075, cat:'nuke', icon:'☢' },
+    // Energy
+    { name:'Zaporizhzhia NPP',lat:47.508, lng:34.587,  cat:'nrg',  icon:'⚡' },
+    { name:'Bushehr NPP',     lat:28.831, lng:50.888,  cat:'nrg',  icon:'⚡' },
+    { name:'Natanz',          lat:33.724, lng:51.727,  cat:'nrg',  icon:'⚡' },
+];
+
+const S_COLORS = { cmd:'#e87020', mil:'#cc4422', nuke:'#44dd66', nrg:'#ffcc00' };
+const S_LABELS = { cmd:'COMMAND', mil:'AIRBASE', nuke:'NUCLEAR', nrg:'ENERGY' };
+
+let showStrategic = true;
+
+function renderStrategicMarkers() {
+    if (!showStrategic) { world.customLayerData([]); return; }
+    world.customLayerData(STRATEGIC)
+        .customThreeObject(d => {
+            const THREE = window.THREE || (world.renderer && world.renderer.THREE);
+            // Use globe.gl's built-in ring approach via labels instead
+            return null;
+        });
+}
+
+// Strategic as labels layer (separate from cities)
+function applyStrategicLabels() {
+    const all = showStrategic
+        ? [...CITIES, ...STRATEGIC.map(s => ({ ...s, name: s.icon+' '+s.name, type: 'strategic_'+s.cat }))]
+        : CITIES;
+    const colors = {
+        ...C_COLORS,
+        strategic_cmd:  '#e87020',
+        strategic_mil:  '#cc4422',
+        strategic_nuke: '#44dd66',
+        strategic_nrg:  '#ffcc00',
+    };
+    world.labelsData(all)
+        .labelColor(d => colors[d.type] || '#888');
+}
+
+function toggleStrategic() {
+    showStrategic = !showStrategic;
+    applyStrategicLabels();
+    const btn = document.getElementById('btnStrategic');
+    btn.style.borderColor = showStrategic ? 'var(--ob)' : 'var(--br)';
+    btn.style.color       = showStrategic ? 'var(--o)'  : 'var(--dim)';
+    btn.textContent       = showStrategic ? '◉ TARGETS ON' : '○ TARGETS OFF';
+    mlog('strategic objects: ' + (showStrategic ? 'visible' : 'hidden'));
+}
+
+// Globe ──
+const world = Globe()(document.getElementById('globeContainer'))
+    .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+    .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
+    .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
+    .atmosphereColor('#6a3a10')
+    .atmosphereAltitude(0.14)
+    .arcColor('color').arcAltitude('alt').arcStroke('stroke')
+    .arcDashLength(1).arcDashGap(0).arcDashAnimateTime(0)
+    .pathPoints('pts').pathColor('color').pathPointAlt(p=>p[2]).pathStroke(2)
+    .labelsData([])
+    .labelLat('lat').labelLng('lng').labelText('name')
+    .labelSize(d => d.cat ? 0.44 : 0.38)
+    .labelDotRadius(d => d.cat ? 0.28 : 0.22)
+    .labelColor(d => C_COLORS[d.type] || S_COLORS[d.cat] || '#888')
+    .labelResolution(2).labelAltitude(0.003)
+    .htmlElementsData([])
+    .htmlElement(d => {
+        const el = document.createElement('div');
+        el.innerHTML = d.html; el.style.pointerEvents = 'none';
+        return el;
+    })
+    .htmlAltitude('alt').htmlLat('lat').htmlLng('lng');
+
+world.controls().autoRotate = true;
+world.controls().autoRotateSpeed = 0.2;
+world.pointOfView({ lat:50, lng:25, altitude:2.6 }, 1000);
+applyStrategicLabels();
+
+// Build strategic target buttons
+(function buildStratList() {
+    const container = document.getElementById('stratList');
+    STRATEGIC.forEach(s => {
+        const btn = document.createElement('button');
+        btn.textContent = s.icon + ' ' + s.name;
+        btn.title = S_LABELS[s.cat];
+        btn.style.cssText = `
+            background:var(--bg2); border:1px solid var(--br);
+            color:${S_COLORS[s.cat]}; font-family:inherit; font-size:9px; font-weight:600;
+            padding:2px 7px; cursor:pointer; text-transform:uppercase;
+            letter-spacing:.04em; transition:all .1s;
+        `;
+        btn.onmouseover = () => { btn.style.borderColor = S_COLORS[s.cat]; };
+        btn.onmouseleave = () => { btn.style.borderColor = 'var(--br)'; };
+        btn.onclick = () => {
+            setTarget(s.lat, s.lng);
+            mlog(`target locked: ${s.name} [${S_LABELS[s.cat]}]`, 'warn');
+        };
+        container.appendChild(btn);
+    });
+})();
+
+// ── Marker HTML ──
+const mkLaunch = `<div style="width:16px;height:16px;border:2px solid #e87020;background:rgba(200,112,32,.15);position:relative">
+    <div style="position:absolute;inset:3px;background:#e87020"></div>
+</div>`;
+
+const mkTarget = `<div style="width:24px;height:24px;position:relative">
+    <div style="position:absolute;top:50%;left:0;right:0;height:1px;background:#cc2200;transform:translateY(-50%)"></div>
+    <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:#cc2200;transform:translateX(-50%)"></div>
+    <div style="position:absolute;inset:9px;border:1px solid #cc2200;border-radius:50%"></div>
+    <div style="position:absolute;inset:4px;border:1px solid rgba(204,34,0,.3);border-radius:50%"></div>
+</div>`;
+
+function setMarkers(tLat, tLng) {
+    const m = [{ lat:KYIV_LAT, lng:KYIV_LNG, alt:0.005, html:mkLaunch }];
+    if (tLat !== null) m.push({ lat:tLat, lng:tLng, alt:0.005, html:mkTarget });
+    world.htmlElementsData(m);
+}
+setMarkers(null);
+
+// ── Explosion HTML generator ──
+function makeExplosionHTML(mass_kg) {
+    const kt   = mass_kg / 1_000_000;
+    const base = Math.round(Math.min(50 + Math.log10(Math.max(kt, 0.001) + 1) * 70, 220));
+    const dur  = (1.2 + Math.log10(Math.max(kt, 0.001) + 1) * 0.5).toFixed(2);
+    const rings = Math.min(3 + Math.floor(Math.log10(Math.max(kt, 0.001) + 1) * 2), 7);
+    const sparks = Math.min(8 + Math.floor(kt * 2), 20);
+
+    const wrap = `position:absolute;top:50%;left:50%;transform-origin:center;pointer-events:none`;
+
+    // white flash
+    let h = `<div style="position:relative;width:${base}px;height:${base}px;pointer-events:none">`;
+    h += `<div style="${wrap};width:${base*1.4}px;height:${base*1.4}px;border-radius:50%;
+        background:radial-gradient(circle,#fff 0%,#ffffaa 25%,transparent 70%);
+        animation:exp-flash ${(+dur*0.6).toFixed(2)}s ease-out forwards;"></div>`;
+
+    // fireball
+    h += `<div style="${wrap};width:${base}px;height:${base}px;border-radius:50%;
+        background:radial-gradient(circle,#fff 0%,#ffee00 20%,#ff6600 50%,#cc2200 75%,transparent 100%);
+        animation:exp-fireball ${dur}s ease-out forwards;"></div>`;
+
+    // mushroom cloud top
+    const cloudW = Math.round(base * 1.1);
+    const cloudH = Math.round(base * 0.7);
+    h += `<div style="position:absolute;bottom:50%;left:50%;
+        width:${cloudW}px;height:${cloudH}px;border-radius:50% 50% 30% 30%;
+        background:radial-gradient(ellipse,#dd6600 0%,#883300 50%,#441100 80%,transparent 100%);
+        animation:exp-smoke ${(+dur*1.4).toFixed(2)}s ease-out forwards;transform-origin:bottom center;"></div>`;
+
+    // stem
+    const stemH = Math.round(base * 0.55);
+    h += `<div style="position:absolute;bottom:50%;left:50%;
+        width:${Math.round(base*0.22)}px;height:${stemH}px;
+        background:linear-gradient(to top,#ff6600,#884400 60%,transparent);
+        animation:exp-stem ${(+dur*1.3).toFixed(2)}s ease-out forwards;transform-origin:bottom center;
+        border-radius:4px;"></div>`;
+
+    // shockwave rings
+    for (let i = 0; i < rings; i++) {
+        const d = (i * 0.18).toFixed(2);
+        const rs = base * (0.8 + i * 0.55);
+        const opacity = (0.8 - i*0.09).toFixed(2);
+        h += `<div style="${wrap};width:${rs}px;height:${rs}px;border-radius:50%;
+            border:${i===0?'3':'2'}px solid ${i===0?'#ffffff':'#ff6600'};
+            opacity:${opacity};
+            animation:exp-ring ${(+dur*(0.8+i*0.15)).toFixed(2)}s ease-out ${d}s forwards;"></div>`;
+    }
+
+    // sparks
+    for (let i = 0; i < sparks; i++) {
+        const angle = (i / sparks) * 360;
+        const dist  = base * (0.6 + Math.random() * 0.8);
+        const sx = Math.round(Math.cos(angle * Math.PI/180) * dist);
+        const sy = Math.round(Math.sin(angle * Math.PI/180) * dist);
+        const sd = (Math.random() * 0.3).toFixed(2);
+        const ss = Math.round(2 + Math.random() * 3);
+        h += `<div style="position:absolute;top:50%;left:50%;
+            width:${ss}px;height:${ss}px;border-radius:50%;
+            background:#ffdd00;margin:-${ss/2}px;
+            --sx:${sx}px;--sy:${sy}px;
+            animation:exp-spark ${(+dur*0.9).toFixed(2)}s ease-out ${sd}s forwards;"></div>`;
+    }
+
+    h += `</div>`;
+    return h;
+}
+
+// ── Street View ──
+function openStreetView() {
+    const lat = +document.getElementById('latEnd').value;
+    const lng = +document.getElementById('lonEnd').value;
+    if (isNaN(lat)||isNaN(lng)) { alert('Спочатку встанови ціль.'); return; }
+    const url = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
+    window.open(url, '_blank');
+}
+
+// ── 2D Map (Leaflet) ──
+let mapView = false;
+
+const lmap = L.map('mapContainer', { zoomControl:false, attributionControl:false })
+    .setView([50, 20], 4);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom:18, subdomains:'abcd'
+}).addTo(lmap);
+
+L.control.zoom({ position:'bottomright' }).addTo(lmap);
+
+// Custom icon factories
+function mkGreenIcon(html) {
+    return L.divIcon({ html, className:'', iconAnchor:[7,7] });
+}
+const launchIcon = mkGreenIcon(
+    `<div style="width:14px;height:14px;border:1px solid #00ff00;background:rgba(0,255,0,.15);position:relative">
+     <div style="position:absolute;inset:3px;background:#00ff00"></div></div>`
+);
+const targetIcon = mkGreenIcon(
+    `<div style="width:20px;height:20px;position:relative">
+     <div style="position:absolute;top:50%;left:0;right:0;height:1px;background:#ff4444;transform:translateY(-50%)"></div>
+     <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:#ff4444;transform:translateX(-50%)"></div>
+     <div style="position:absolute;inset:8px;border:1px solid #ff4444;border-radius:50%"></div></div>`
+);
+
+// Persistent Leaflet layers
+const mapLaunchMarker  = L.marker([KYIV_LAT, KYIV_LNG], { icon:launchIcon, zIndexOffset:500 }).addTo(lmap);
+let   mapTargetMarker  = null;
+let   mapTracerMarker  = null;
+let   mapTrajLine      = null;
+let   mapBlastLayers   = [];
+
+function mapSetTarget(lat, lng) {
+    if (mapTargetMarker) mapTargetMarker.setLatLng([lat, lng]);
+    else { mapTargetMarker = L.marker([lat, lng], { icon:targetIcon, zIndexOffset:400 }).addTo(lmap); }
+}
+
+function mapShowTracer(lat, lng) {
+    if (!mapTracerMarker) {
+        mapTracerMarker = L.circleMarker([lat, lng], {
+            radius:5, color:'#ff8800', fillColor:'#ff3300',
+            fillOpacity:1, weight:1.5
+        }).addTo(lmap);
+    } else {
+        mapTracerMarker.setLatLng([lat, lng]);
+    }
+}
+
+function mapShowTail(points) {
+    const latlngs = points.map(([la,ln]) => [la, ln]);
+    if (!mapTrajLine) {
+        mapTrajLine = L.polyline(latlngs, { color:'#ff3300', weight:1.5, opacity:.85 }).addTo(lmap);
+    } else {
+        mapTrajLine.setLatLngs(latlngs);
+    }
+}
+
+function mapShowBlast(lat, lng, lethal, severe, moderate) {
+    mapBlastLayers.forEach(l => lmap.removeLayer(l));
+    mapBlastLayers = [
+        L.circle([lat,lng], { radius:moderate*1000, color:'#ffcc00', fillColor:'#ffcc00', fillOpacity:.07, weight:1 }).addTo(lmap),
+        L.circle([lat,lng], { radius:severe*1000,   color:'#ff6600', fillColor:'#ff6600', fillOpacity:.12, weight:1 }).addTo(lmap),
+        L.circle([lat,lng], { radius:lethal*1000,   color:'#ff0000', fillColor:'#ff0000', fillOpacity:.25, weight:2 }).addTo(lmap),
+    ];
+}
+
+function mapClearBlast() {
+    mapBlastLayers.forEach(l => lmap.removeLayer(l));
+    mapBlastLayers = [];
+    if (mapTrajLine)    { lmap.removeLayer(mapTrajLine);    mapTrajLine = null; }
+    if (mapTracerMarker){ lmap.removeLayer(mapTracerMarker); mapTracerMarker = null; }
+}
+
+// Right-click on map = set target
+lmap.on('contextmenu', e => {
+    const la = +e.latlng.lat.toFixed(4), ln = +e.latlng.lng.toFixed(4);
+    document.getElementById('latEnd').value = la;
+    document.getElementById('lonEnd').value = ln;
+    updateTarget(la, ln);
+    mapSetTarget(la, ln);
+    setMarkers(la, ln);
+    mlog(`target set: ${la}N ${ln}E`);
+});
+
+function toggleView() {
+    mapView = !mapView;
+    document.getElementById('globeContainer').style.display = mapView ? 'none' : 'block';
+    document.getElementById('mapContainer').style.display   = mapView ? 'block' : 'none';
+    const label = mapView ? '🗺 2D MAP' : '🌐 3D GLOBE';
+    document.getElementById('viewToggle').textContent  = mapView ? '2D MAP' : '3D GLOBE';
+    document.getElementById('viewToggle2').textContent = label;
+    document.getElementById('viewToggle2').style.background = mapView ? 'var(--bg2)' : 'var(--od)';
+    document.getElementById('viewToggle2').style.color = mapView ? 'var(--dim)' : 'var(--w)';
+    document.getElementById('hudMode').textContent = mapView ? '2D MAP' : '3D GLOBE';
+    if (mapView) lmap.invalidateSize();
+}
+
+// ── Right-click ──
+document.getElementById('globeContainer').addEventListener('contextmenu', e => {
+    e.preventDefault();
+    const c = world.toGlobeCoords(e.offsetX, e.offsetY);
+    if (!c) return;
+    const la = +c.lat.toFixed(4), ln = +c.lng.toFixed(4);
+    document.getElementById('latEnd').value = la;
+    document.getElementById('lonEnd').value = ln;
+    updateTarget(la, ln);
+    setMarkers(la, ln);
+    mapSetTarget(la, ln);
+    mlog(`target set: ${la}N ${ln}E`);
+});
+
+function updateTarget(lat, lng) {
+    const el = document.getElementById('targetDisplay');
+    el.textContent = `${Math.abs(lat).toFixed(4)}°${lat>=0?'N':'S'}   ${Math.abs(lng).toFixed(4)}°${lng>=0?'E':'W'}`;
+    el.classList.add('set');
+    document.getElementById('tgtStatus').textContent = 'LOCKED';
+    document.getElementById('tgtStatus').style.color = '#cc2200';
+    document.getElementById('hudCoords').textContent = `TGT  ${lat.toFixed(3)}°N  ${lng.toFixed(3)}°E`;
+}
+
+function setTarget(lat, lng) {
+    document.getElementById('latEnd').value = lat;
+    document.getElementById('lonEnd').value = lng;
+    updateTarget(lat, lng);
+    setMarkers(lat, lng);
+    mapSetTarget(lat, lng);
+    lmap.setView([lat, lng], Math.max(lmap.getZoom(), 4));
+    world.controls().autoRotate = false;
+    world.pointOfView({ lat, lng, altitude:2.2 }, 800);
+}
+
+// ── Clock ──
+setInterval(() => {
+    const t = new Date().toUTCString().slice(17,25);
+    document.getElementById('utcClock').textContent = t + ' UTC';
+    document.getElementById('hudTime2').textContent = t;
+}, 1000);
+
+// ── Log ──
+function mlog(msg, cls='ok') {
+    const el = document.getElementById('missionLog');
+    const t  = new Date().toTimeString().slice(0,8);
+    const tags = { ok:'[OK]', warn:'[!!]', err:'[ERR]' };
+    el.innerHTML += `<br><span class="log-${cls}">${tags[cls]||'[--]'}</span> ${t} ${msg}`;
+    el.scrollTop = el.scrollHeight;
+}
+
+// ── Loader ──
+async function setLoad(text, pct, ms=350, sub='') {
+    document.getElementById('loadText').textContent = text;
+    document.getElementById('loadBar').style.width = pct + '%';
+    if (sub) document.getElementById('loadSteps').textContent = sub;
+    await new Promise(r => setTimeout(r, ms));
+}
+
+let isFlying = false;
+let lastMissionData = null;
+
+// ── Night/Day toggle ──
+let nightMode = false;
+function toggleNight() {
+    nightMode = !nightMode;
+    world.globeImageUrl(nightMode
+        ? 'https://unpkg.com/three-globe/example/img/earth-night.jpg'
+        : 'https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg'
+    );
+    document.getElementById('nightToggle').textContent  = nightMode ? 'NIGHT' : 'DAY';
+    document.getElementById('nightToggle2').textContent = nightMode ? '🌙 NIGHT' : '☀ DAY';
+    document.getElementById('nightToggle2').style.color = nightMode ? 'var(--o)' : 'var(--dim)';
+    document.getElementById('nightToggle2').style.borderColor = nightMode ? 'var(--ob)' : 'var(--br)';
+}
+
+// ── Altitude profile ──
+function drawAltProfile(traj, maxAlt) {
+    const canvas = document.getElementById('altCanvas');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    if (!traj || traj.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    traj.forEach((p, i) => {
+        const x = (i / (traj.length-1)) * W;
+        const y = H - (p[2] / maxAlt) * (H - 4);
+        ctx.lineTo(x, y);
+    });
+    ctx.lineTo(W, H);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(200,112,32,0.18)';
+    ctx.fill();
+    ctx.beginPath();
+    traj.forEach((p, i) => {
+        const x = (i / (traj.length-1)) * W;
+        const y = H - (p[2] / maxAlt) * (H - 4);
+        i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    });
+    ctx.strokeStyle = '#c87020';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+}
+
+// ── Mission report download ──
+function downloadReport() {
+    if (!lastMissionData) { mlog('no mission data to export', 'err'); return; }
+    const d = lastMissionData;
+    const now = new Date().toISOString();
+    const txt = [
+        '='.repeat(50),
+        'BALLISTIC TRAJECTORY MISSION REPORT',
+        '='.repeat(50),
+        `Generated: ${now}`,
+        '',
+        'LAUNCH PARAMETERS',
+        '-'.repeat(30),
+        `Origin:        Kyiv, Ukraine (50.4501N 30.5234E)`,
+        `Target:        ${d.lat2.toFixed(4)}N ${d.lon2.toFixed(4)}E`,
+        `Mass:          ${d.massKt} kt`,
+        `Diameter:      ${d.diam} m`,
+        `Drag Cd:       ${d.cd}`,
+        '',
+        'TRAJECTORY DATA',
+        '-'.repeat(30),
+        `Surface dist:  ${d.distance_km.toFixed(1)} km`,
+        `Max apogee:    ${d.max_altitude_km.toFixed(1)} km`,
+        `Flight time:   ${d.flight_time_min.toFixed(2)} min`,
+        `Init velocity: ${d.initial_speed_kms.toFixed(3)} km/s`,
+        '',
+        'BLAST ASSESSMENT (Hopkinson-Cranz)',
+        '-'.repeat(30),
+        `Lethal zone:   ${d.blastLethal} km radius`,
+        `Severe zone:   ${d.blastSevere} km radius`,
+        `Moderate zone: ${d.blastModerate} km radius`,
+        '',
+        '='.repeat(50),
+    ].join('\n');
+
+    const blob = new Blob([txt], {type:'text/plain'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `mission_report_${Date.now()}.txt`;
+    a.click();
+}
+
+// ── Compute ──
+async function computeTrajectory() {
+    if (isFlying) return;
+    const lat2   = +document.getElementById('latEnd').value;
+    const lon2   = +document.getElementById('lonEnd').value;
+    const massKt = +document.getElementById('mass').value;
+    const mass   = massKt * 1_000_000; // kiloton → kg
+    const diam   = +document.getElementById('diameter').value;
+    const cd     = +document.getElementById('dragCd').value;
+
+    if (isNaN(lat2)||isNaN(lon2)) { alert('Set target coordinates first.'); return; }
+
+    document.getElementById('btnCompute').disabled = true;
+    document.getElementById('hudCountdown').textContent = '';
+    world.arcsData([]); world.pathsData([]);
+    setMarkers(lat2, lon2);
+    mapSetTarget(lat2, lon2);
+    mapClearBlast();
+
+    const overlay = document.getElementById('loadOverlay');
+    overlay.style.display = 'flex';
+
+    await setLoad('initializing solver...', 15, 350, 'loading ECEF coordinate engine');
+    mlog('trajectory computation started', 'warn');
+
+    let data;
+    try {
+        await setLoad('solving equations of motion...', 45, 200, 'RK45 integration · ISA atmosphere');
+        const r = await fetch('/calculate', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({lat1:KYIV_LAT,lon1:KYIV_LNG,lat2,lon2,mass,diameter:diam,cd})
+        });
+        data = await r.json();
+        if (data.error) throw new Error(data.error);
+    } catch(e) {
+        overlay.style.display = 'none';
+        document.getElementById('btnCompute').disabled = false;
+        mlog('computation failed: ' + e.message, 'err');
+        return;
+    }
+
+    await setLoad('applying coriolis corrections...', 70, 250, 'Coriolis · centrifugal · drag forces');
+    await setLoad('rendering trajectory...', 95, 200, 'optimizing launch parameters');
+
+    document.getElementById('tDist').textContent  = data.distance_km.toFixed(0);
+    document.getElementById('tAlt').textContent   = data.max_altitude_km.toFixed(0);
+    document.getElementById('tTime').textContent  = data.flight_time_min.toFixed(1);
+    document.getElementById('tVel').textContent   = data.initial_speed_kms.toFixed(2);
+    document.getElementById('hudCoords').textContent = `TGT ${lat2.toFixed(3)}N ${lon2.toFixed(3)}E`;
+
+    mlog(`dist=${data.distance_km.toFixed(0)}km apogee=${data.max_altitude_km.toFixed(0)}km v=${data.initial_speed_kms.toFixed(2)}km/s mass=${massKt}kt`);
+
+    world.controls().autoRotate = false;
+    const dLng = ((lon2-KYIV_LNG+540)%360-180);
+    const midLat=(KYIV_LAT+lat2)/2, midLng=KYIV_LNG+dLng/2;
+    const camAlt = Math.min(Math.max(Math.sqrt(dLng**2+(lat2-KYIV_LAT)**2)/35,1.4),3.5);
+    world.pointOfView({lat:midLat,lng:midLng,altitude:camAlt},1200);
+
+    await setLoad('launch sequence ready.', 100, 200, '✓ trajectory computed · awaiting launch');
+    overlay.style.display = 'none';
+
+    // ── Blast radius calculation (Hopkinson-Cranz спрощена) ──
+    // R_lethal(km) = 2.2 * W_kt^(1/3)  — зона повного руйнування
+    // R_severe(km) = 4.5 * W_kt^(1/3)  — зона важких пошкоджень
+    // R_moderate(km) = 9.0 * W_kt^(1/3) — зона часткових пошкоджень
+    const blastLethal   = +(2.2  * Math.pow(massKt, 1/3)).toFixed(2);
+    const blastSevere   = +(4.5  * Math.pow(massKt, 1/3)).toFixed(2);
+    const blastModerate = +(9.0  * Math.pow(massKt, 1/3)).toFixed(2);
+
+    lastMissionData = { lat2, lon2, massKt, diam, cd, ...data, blastLethal, blastSevere, blastModerate };
+    drawAltProfile(data.trajectory, data.max_altitude_km);
+
+    document.getElementById('tDist').textContent  = data.distance_km.toFixed(0);
+
+    // ── Globe polygon: circle by bearing ──
+    function circleCoords(lat, lng, radiusKm, n=64) {
+        const R = 6371, d = radiusKm / R;
+        const pts = [];
+        for (let i = 0; i <= n; i++) {
+            const b  = (i / n) * 2 * Math.PI;
+            const φ1 = lat * Math.PI / 180;
+            const λ1 = lng * Math.PI / 180;
+            const φ2 = Math.asin(Math.sin(φ1)*Math.cos(d) + Math.cos(φ1)*Math.sin(d)*Math.cos(b));
+            const λ2 = λ1 + Math.atan2(Math.sin(b)*Math.sin(d)*Math.cos(φ1), Math.cos(d)-Math.sin(φ1)*Math.sin(φ2));
+            pts.push([λ2*180/Math.PI, φ2*180/Math.PI]);
+        }
+        return [pts];
+    }
+
+    // ── Animate tracer ──
+    const traj     = data.trajectory;
+    const N        = traj.length;
+    const maxAlt   = data.max_altitude_km;
+    const altScale = Math.min((maxAlt/6371)*4, 0.55);
+    const TAIL     = 25;
+    const DURATION = 8000; // ms
+
+    isFlying = true;
+    document.getElementById('telStatus').textContent = 'LIVE';
+    document.getElementById('telStatus').style.color = '#e87020';
+    mlog('LAUNCH INITIATED', 'warn');
+
+    document.getElementById('flightBar').style.display = 'flex';
+    document.getElementById('flightFill').style.width  = '0%';
+
+    const startTime = performance.now();
+    let lastIdx = -1;
+    let rafId;
+
+    function onImpact() {
+        isFlying = false;
+        cancelAnimationFrame(rafId);
+        document.getElementById('btnCompute').disabled = false;
+        document.getElementById('flightBar').style.display = 'none';
+
+        document.getElementById('hudCountdown').textContent = 'IMPACT';
+
+        // Повний слід з градієнтом зелений→червоний
+        const fullPts = traj.map(([la,ln,alt]) => [la, ln, (alt/maxAlt)*altScale]);
+        const fullColors = fullPts.map((_,i) => {
+            const p = i / Math.max(fullPts.length-1, 1);
+            if (p < 0.5) {
+                const r = Math.round(p*2*255).toString(16).padStart(2,'0');
+                return `#${r}ff00`;
+            } else {
+                const g = Math.round((1-(p-0.5)*2)*255).toString(16).padStart(2,'0');
+                return `#ff${g}00`;
+            }
+        });
+        world.pathsData([{ pts: fullPts, colors: fullColors }])
+            .pathColor(d => d.colors)
+            .pathStroke(2);
+
+        // Малюємо фінальний профіль висоти
+        drawAltProfile(traj, maxAlt);
+
+        // Кола радіусу ураження на глобусі
+        world.polygonsData([
+            { geo: { type:'Feature', geometry:{ type:'Polygon', coordinates: circleCoords(lat2,lon2,blastLethal)   }}, color:'rgba(255,0,0,0.35)',    alt:0.001 },
+            { geo: { type:'Feature', geometry:{ type:'Polygon', coordinates: circleCoords(lat2,lon2,blastSevere)   }}, color:'rgba(255,100,0,0.18)', alt:0.001 },
+            { geo: { type:'Feature', geometry:{ type:'Polygon', coordinates: circleCoords(lat2,lon2,blastModerate) }}, color:'rgba(255,200,0,0.10)', alt:0.001 },
+        ])
+        .polygonGeoJsonGeometry('geo.geometry')
+        .polygonCapColor(d => d.color)
+        .polygonSideColor(() => 'rgba(0,0,0,0)')
+        .polygonAltitude(d => d.alt);
+
+        // Вибух HTML
+        const expHTML = makeExplosionHTML(mass);
+        world.htmlElementsData([
+            { lat:KYIV_LAT, lng:KYIV_LNG, alt:0.005, html:mkLaunch },
+            { lat:lat2,     lng:lon2,      alt:0.02,  html:expHTML  }
+        ]);
+
+        mlog(`IMPACT. R_lethal=${blastLethal}km R_severe=${blastSevere}km R_mod=${blastModerate}km`, 'err');
+
+        // Синхронізація 2D карти
+        mapShowBlast(lat2, lon2, blastLethal, blastSevere, blastModerate);
+        mapShowTail(traj.map(([la,ln]) => [la, ln]));
+        if (mapTracerMarker) { lmap.removeLayer(mapTracerMarker); mapTracerMarker = null; }
+        lmap.flyTo([lat2, lon2], Math.max(lmap.getZoom(), 5), { duration:1.2 });
+
+        // Камера на точку удару
+        world.pointOfView({ lat:lat2, lng:lon2, altitude:1.2 }, 1200);
+
+        // Прибираємо вибух, лишаємо маркер
+        setTimeout(() => {
+            world.htmlElementsData([
+                { lat:KYIV_LAT, lng:KYIV_LNG, alt:0.005, html:mkLaunch },
+                { lat:lat2,     lng:lon2,      alt:0.005, html:mkTarget }
+            ]);
+        }, 2800);
+    }
+
+    function animFrame(now) {
+        const elapsed = now - startTime;
+        const t = Math.min(elapsed / DURATION, 1);
+        // Easing: ease-in-out cubic
+        const tEased = t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
+        const idx = Math.min(Math.floor(tEased * (N-1)), N-1);
+
+        if (idx !== lastIdx) {
+            lastIdx = idx;
+            const head = traj[idx];
+            const pct  = t;
+
+            // Хвіст з градієнтом (зелений → жовтий → червоний)
+            const ts   = Math.max(0, idx - TAIL);
+            const tail = traj.slice(ts, idx+1).map(([la,ln,alt])=>[la,ln,(alt/maxAlt)*altScale]);
+            const colors = tail.map((_,i) => {
+                const p = i / Math.max(tail.length-1, 1);
+                if (p < 0.5) {
+                    const r = Math.round(p*2*255).toString(16).padStart(2,'0');
+                    return `#${r}ff00`;
+                } else {
+                    const g = Math.round((1-(p-0.5)*2)*255).toString(16).padStart(2,'0');
+                    return `#ff${g}00`;
+                }
+            });
+            world.pathsData([{ pts:tail, colors }])
+                .pathColor(d => d.colors)
+                .pathStroke(2);
+
+            // Голова
+            const headHTML = `<div style="width:10px;height:10px;border:2px solid #e87020;background:#c86400;box-shadow:0 0 8px #e87020"></div>`;
+            world.htmlElementsData([
+                { lat:KYIV_LAT, lng:KYIV_LNG, alt:0.005, html:mkLaunch },
+                { lat:lat2,     lng:lon2,      alt:0.005, html:mkTarget },
+                { lat:head[0],  lng:head[1],  alt:(head[2]/maxAlt)*altScale+0.005, html:headHTML }
+            ]);
+
+            // Телеметрія
+            document.getElementById('tCurAlt').textContent = head[2].toFixed(1);
+            document.getElementById('tPct').textContent    = (pct*100).toFixed(0)+'%';
+            document.getElementById('flightFill').style.width = (pct*100)+'%';
+            document.getElementById('flightPct').textContent  = (pct*100).toFixed(0)+'%';
+            document.getElementById('telBar').style.width     = (pct*100)+'%';
+
+            // Countdown timer
+            const totalSec = data.flight_time_min * 60;
+            const remainSec = Math.ceil(totalSec * (1 - t));
+            const mm = String(Math.floor(remainSec/60)).padStart(2,'0');
+            const ss = String(remainSec % 60).padStart(2,'0');
+            document.getElementById('hudCountdown').textContent = `T-${mm}:${ss}`;
+
+            // Altitude profile з вертикальною лінією прогресу
+            drawAltProfile(traj, maxAlt);
+            const altCanvas = document.getElementById('altCanvas');
+            const altCtx = altCanvas.getContext('2d');
+            const xLine = (idx / (N-1)) * altCanvas.width;
+            altCtx.strokeStyle = '#ff3300';
+            altCtx.lineWidth = 1;
+            altCtx.beginPath();
+            altCtx.moveTo(xLine, 0);
+            altCtx.lineTo(xLine, altCanvas.height);
+            altCtx.stroke();
+
+            // Синхронізація 2D карти
+            mapShowTail(traj.slice(Math.max(0,idx-TAIL), idx+1));
+            mapShowTracer(head[0], head[1]);
+
+
+            if (idx===Math.floor(N*.25)) mlog('25% complete');
+            if (idx===Math.floor(N*.5))  mlog(`apogee=${head[2].toFixed(0)}km descending`, 'warn');
+            if (idx===Math.floor(N*.75)) mlog('75% terminal phase');
+        }
+
+        if (t < 1) {
+            rafId = requestAnimationFrame(animFrame);
+        } else {
+            onImpact();
+        }
+    }
+
+    rafId = requestAnimationFrame(animFrame);
+}
+</script>
+</body>
+</html>
